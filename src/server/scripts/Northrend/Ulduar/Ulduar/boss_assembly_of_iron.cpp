@@ -50,7 +50,8 @@ enum AssemblySpells
     // Runemaster Molgeim
     SPELL_SHIELD_OF_RUNES                        = 62274,
     SPELL_SHIELD_OF_RUNES_BUFF                   = 62277,
-    SPELL_SUMMON_RUNE_OF_POWER                   = 63513,
+    SPELL_SUMMON_RUNE_OF_POWER                   = 61973, //63513,
+    SPELL_RUNE_OF_POWER_AURA                     = 61974,
     SPELL_RUNE_OF_DEATH                          = 62269,
     SPELL_RUNE_OF_SUMMONING                      = 62273, // This is the spell that summons the rune
     SPELL_RUNE_OF_SUMMONING_SUMMON               = 62020, // Spell that summons
@@ -129,7 +130,8 @@ enum AssemblyYells
 enum Misc
 {
     NPC_WORLD_TRIGGER                            = 22515,
-
+    NPC_RUNE_OF_POWER                            = 33705,
+    NPC_OVERLOAD_VISUAL                          = 32866,
     DATA_PHASE_3                                 = 1
 };
 
@@ -225,10 +227,12 @@ class boss_steelbreaker : public CreatureScript
             void KilledUnit(Unit* who) override
             {
                 if (who->GetTypeId() == TYPEID_PLAYER)
+                {
                     Talk(SAY_STEELBREAKER_SLAY);
 
-                if (phase == 3)
-                    DoCast(me, SPELL_ELECTRICAL_CHARGE);
+                    if (phase == 3)
+                        DoCast(me, SPELL_ELECTRICAL_CHARGE);
+                }
             }
 
             void UpdateAI(uint32 diff) override
@@ -314,7 +318,7 @@ class boss_runemaster_molgeim : public CreatureScript
                 events.SetPhase(++phase);
                 events.ScheduleEvent(EVENT_BERSERK, 15min);
                 events.ScheduleEvent(EVENT_SHIELD_OF_RUNES, 30s);
-                events.ScheduleEvent(EVENT_RUNE_OF_POWER, 20s);
+                events.ScheduleEvent(EVENT_RUNE_OF_POWER, 15s, 25s);
             }
 
             uint32 GetData(uint32 type) const override
@@ -406,7 +410,7 @@ class boss_runemaster_molgeim : public CreatureScript
                                             target = Steelbreaker;
                                     break;
                                 case 2:
-                                    if (Creature* Brundir = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_STEELBREAKER)))
+                                    if (Creature* Brundir = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_BRUNDIR)))
                                         if (Brundir->IsAlive())
                                             target = Brundir;
                                     break;
@@ -414,7 +418,7 @@ class boss_runemaster_molgeim : public CreatureScript
                                     break;
                             }
                             DoCast(target, SPELL_SUMMON_RUNE_OF_POWER);
-                            events.ScheduleEvent(EVENT_RUNE_OF_POWER, 1min);
+                            events.ScheduleEvent(EVENT_RUNE_OF_POWER, 30s, 45s);
                             break;
                         }
                         case EVENT_SHIELD_OF_RUNES:
@@ -491,13 +495,21 @@ class boss_stormcaller_brundir : public CreatureScript
                 BossAI::JustEngagedWith(who);
                 Talk(SAY_BRUNDIR_AGGRO);
                 events.SetPhase(++phase);
-                events.ScheduleEvent(EVENT_MOVE_POSITION, 1s);
+                //events.ScheduleEvent(EVENT_MOVE_POSITION, 1s);
                 events.ScheduleEvent(EVENT_BERSERK, 15min);
                 events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 4s);
-                events.ScheduleEvent(EVENT_OVERLOAD, 60s, 120s);
+                events.ScheduleEvent(EVENT_OVERLOAD, 35s, 60s);
 
                 if (Creature* trigger = me->FindNearestCreature(NPC_WORLD_TRIGGER, 100.0f))
                     m_TriggerGUID = trigger->GetGUID();
+            }
+
+            void JustSummoned(Creature* summon) override
+            {
+                if (summon->GetEntry() == NPC_OVERLOAD_VISUAL)
+                {
+                    summon->DespawnOrUnsummon();
+                }
             }
 
             void DoAction(int32 action) override
@@ -510,7 +522,7 @@ class boss_stormcaller_brundir : public CreatureScript
                         me->AddAura(SPELL_SUPERCHARGE, me);
                         events.SetPhase(++phase);
                         events.RescheduleEvent(EVENT_CHAIN_LIGHTNING, 7s, 12s);
-                        events.RescheduleEvent(EVENT_OVERLOAD, 40s, 50s);
+                        events.RescheduleEvent(EVENT_OVERLOAD, 35s, 50s);
                         if (phase >= 2)
                             events.RescheduleEvent(EVENT_LIGHTNING_WHIRL, 15s, 250s);
                         if (phase >= 3)
@@ -577,13 +589,13 @@ class boss_stormcaller_brundir : public CreatureScript
                         case EVENT_CHAIN_LIGHTNING:
                             if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                                 DoCast(target, SPELL_CHAIN_LIGHTNING);
-                            events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 7s, 10s);
+                            events.ScheduleEvent(EVENT_CHAIN_LIGHTNING, 2s, 4s);
                             break;
                         case EVENT_OVERLOAD:
                             Talk(EMOTE_BRUNDIR_OVERLOAD);
                             Talk(SAY_BRUNDIR_SPECIAL);
                             DoCast(SPELL_OVERLOAD);
-                            events.ScheduleEvent(EVENT_OVERLOAD, 60s, 120s);
+                            events.ScheduleEvent(EVENT_OVERLOAD, 35s, 60s);
                             break;
                         case EVENT_LIGHTNING_WHIRL:
                             DoCast(SPELL_LIGHTNING_WHIRL);

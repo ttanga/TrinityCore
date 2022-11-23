@@ -121,6 +121,7 @@ enum UlduarNPCs
     NPC_AERIAL_COMMAND_UNIT                 = 33670,
     NPC_ASSAULT_BOT                         = 34057,
     NPC_BOMB_BOT                            = 33836,
+    NPC_MAGNETIC_CORE                       = 34068,                    // has auras 64438 and 64436
     NPC_JUNK_BOT                            = 33855,
     NPC_EMERGENCY_FIRE_BOT                  = 34147,
     NPC_FROST_BOMB                          = 34149,

@@ -141,7 +141,7 @@ enum FreyaSpells
     SPELL_UNSTABLE_ENERGY                        = 62217,
     SPELL_PHOTOSYNTHESIS                         = 62209,
     SPELL_UNSTABLE_SUN_BEAM_TRIGGERED            = 62243,
-    SPELL_FREYA_UNSTABLE_SUNBEAM                 = 62450, // Or maybe 62866?
+    SPELL_FREYA_UNSTABLE_SUNBEAM                 = 62449, //62450, // Or maybe 62866?
 
     // Sun Beam
     SPELL_FREYA_UNSTABLE_ENERGY                  = 62451,
@@ -361,7 +361,7 @@ class boss_freya : public CreatureScript
                 if (Elder[0] && Elder[0]->IsAlive())
                 {
                     Elder[0]->CastSpell(me, SPELL_BRIGHTLEAF_ESSENCE, true);
-                    events.ScheduleEvent(EVENT_UNSTABLE_ENERGY, 10s, 20s);
+                    events.ScheduleEvent(EVENT_UNSTABLE_ENERGY, 10s, 30s);
                 }
 
                 if (Elder[1] && Elder[1]->IsAlive())
@@ -432,9 +432,23 @@ class boss_freya : public CreatureScript
                             events.ScheduleEvent(EVENT_NATURE_BOMB, 10s, 12s);
                             break;
                         case EVENT_UNSTABLE_ENERGY:
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
-                                DoCast(target, SPELL_FREYA_UNSTABLE_SUNBEAM, true);
-                            events.ScheduleEvent(EVENT_UNSTABLE_ENERGY, 15s, 20s);
+                            {
+                                std::list<Unit*> targets;
+                                SelectTargetList(targets, RAID_MODE(1, 3), SelectTargetMethod::Random, 0, 100.0f, true);
+
+                                if (!targets.empty())
+                                {
+                                    uint32 i = 0;
+                                    for (std::list<Unit*>::const_iterator itr = targets.begin(); itr != targets.end(); ++itr, ++i)
+                                    {
+                                        Unit* target = *itr;
+                                        if (target->IsAlive())
+                                            target->CastSpell(target, SPELL_FREYA_UNSTABLE_SUNBEAM, true);
+                                    }
+                                }
+
+                                events.ScheduleEvent(EVENT_UNSTABLE_ENERGY, 25s, 40s);
+                            }
                             break;
                         case EVENT_WAVE:
                             SpawnWave();
