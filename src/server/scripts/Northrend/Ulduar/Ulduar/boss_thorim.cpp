@@ -26,6 +26,7 @@
 #include "Player.h"
 #include "ScriptedCreature.h"
 #include "SpellAuraEffects.h"
+#include "SpellHistory.h"
 #include "SpellMgr.h"
 #include "SpellScript.h"
 #include "TypeContainerVisitor.h"
@@ -101,7 +102,10 @@ enum Events
     EVENT_START_SIF_CHANNEL,
     EVENT_STORMHAMMER,
     EVENT_CHARGE_ORB,
-    EVENT_SUMMON_ADDS,
+    EVENT_SUMMON_ADDS_WARBRINGER,
+    EVENT_SUMMON_ADDS_EVOKER,
+    EVENT_SUMMON_ADDS_CHAMPION,
+    EVENT_SUMMON_ADDS_COMMONERS,
     EVENT_BERSERK,
     EVENT_JUMPDOWN,
     EVENT_UNBALANCING_STRIKE,
@@ -263,6 +267,12 @@ ThorimTrashInfo const StaticThorimTrashInfo[ThorimTrashCount] =
     { DARK_RUNE_ACOLYTE,    NPC_DARK_RUNE_ACOLYTE,     SPELL_RENEW,           SPELL_GREATER_HEAL, 0                       }
 };
 
+Milliseconds const SpawnPeriodInitialDelay = 3s;
+Milliseconds const SpawnPeriodRuneWarbringers = 15s;
+Milliseconds const SpawnPeriodRuneEvokers = 20s;
+Milliseconds const SpawnPeriodRuneCommoners = 22s;
+Milliseconds const SpawnPeriodRuneChampions = 25s;
+
 enum Actions
 {
     ACTION_INCREASE_PREADDS_COUNT,
@@ -393,13 +403,13 @@ class TrashJumpEvent : public BasicEvent
             switch (_stage)
             {
                 case 0:
-                    _owner->CastSpell(nullptr, SPELL_LEAP);
                     ++_stage;
+                    _owner->CastSpell(nullptr, SPELL_LEAP);
+                    _owner->SetReactState(REACT_AGGRESSIVE);
+                    _owner->AI()->DoZoneInCombat(_owner);
                     _owner->m_Events.AddEvent(this, Milliseconds(eventTime) + 2s);
                     return false;
                 case 1:
-                    _owner->SetReactState(REACT_AGGRESSIVE);
-                    _owner->AI()->DoZoneInCombat(_owner);
                     _owner->AI()->SetBoundary(&ArenaBoundaries);
                     return true;
                 default:
@@ -624,7 +634,10 @@ class boss_thorim : public CreatureScript
 
                 events.ScheduleEvent(EVENT_STORMHAMMER, 40s, 0, PHASE_1);
                 events.ScheduleEvent(EVENT_CHARGE_ORB, 30s, 0, PHASE_1);
-                events.ScheduleEvent(EVENT_SUMMON_ADDS, 15s, 0, PHASE_1);
+                events.ScheduleEvent(EVENT_SUMMON_ADDS_WARBRINGER, SpawnPeriodInitialDelay + SpawnPeriodRuneWarbringers, 0, PHASE_1);
+                events.ScheduleEvent(EVENT_SUMMON_ADDS_EVOKER, SpawnPeriodInitialDelay + SpawnPeriodRuneEvokers, 0, PHASE_1);
+                events.ScheduleEvent(EVENT_SUMMON_ADDS_COMMONERS, SpawnPeriodInitialDelay + SpawnPeriodRuneCommoners, 0, PHASE_1);
+                events.ScheduleEvent(EVENT_SUMMON_ADDS_CHAMPION, SpawnPeriodInitialDelay + SpawnPeriodRuneChampions, 0, PHASE_1);
                 events.ScheduleEvent(EVENT_BERSERK, 369s);
 
                 DoCast(me, SPELL_SHEATH_OF_LIGHTNING);
@@ -670,7 +683,7 @@ class boss_thorim : public CreatureScript
                     case NPC_DARK_RUNE_EVOKER:
                     case NPC_DARK_RUNE_COMMONER:
                         summon->SetReactState(REACT_PASSIVE);
-                        summon->m_Events.AddEvent(new TrashJumpEvent(summon), summon->m_Events.CalculateTime(3s));
+                        summon->m_Events.AddEvent(new TrashJumpEvent(summon), summon->m_Events.CalculateTime(100ms));
                         break;
                     case NPC_SIF:
                         summon->SetReactState(REACT_PASSIVE);
@@ -715,9 +728,21 @@ class boss_thorim : public CreatureScript
                             DoCastAOE(SPELL_CHARGE_ORB);
                             events.Repeat(15s, 20s);
                             break;
-                        case EVENT_SUMMON_ADDS:
-                            SummonWave();
-                            events.Repeat(_orbSummoned ? 3s : 10s);
+                        case EVENT_SUMMON_ADDS_CHAMPION:
+                            SummonWave(6, 1);
+                            events.ScheduleEvent(EVENT_SUMMON_ADDS_CHAMPION, _orbSummoned ? 3s : SpawnPeriodRuneChampions, 0, PHASE_1);
+                            break;
+                        case EVENT_SUMMON_ADDS_WARBRINGER:
+                            SummonWave(7, 1);
+                            events.ScheduleEvent(EVENT_SUMMON_ADDS_WARBRINGER, _orbSummoned ? 3s : SpawnPeriodRuneWarbringers, 0, PHASE_1);
+                            break;
+                        case EVENT_SUMMON_ADDS_EVOKER:
+                            SummonWave(8, 1);
+                            events.ScheduleEvent(EVENT_SUMMON_ADDS_EVOKER, _orbSummoned ? 3s : SpawnPeriodRuneEvokers, 0, PHASE_1);
+                            break;
+                        case EVENT_SUMMON_ADDS_COMMONERS:
+                            SummonWave(9, urand(5, 6));
+                            events.ScheduleEvent(EVENT_SUMMON_ADDS_COMMONERS, _orbSummoned ? 3s : SpawnPeriodRuneCommoners, 0, PHASE_1);
                             break;
                         case EVENT_JUMPDOWN:
                             if (_hardMode)
@@ -854,7 +879,7 @@ class boss_thorim : public CreatureScript
                 {
                     if (HeightPositionCheck(false)(bunny))
                         return true;
-                    return ArenaCenter.GetExactDist2dSq(bunny) < 3025.0f;
+                    return ArenaCenter.GetExactDist2dSq(bunny) < 2400.0f;//3025.0f;
                 });
 
                 if (triggerList.empty())
@@ -870,44 +895,13 @@ class boss_thorim : public CreatureScript
                     Trinity::Containers::RandomResize(triggerList, count);
             }
 
-            void SummonWave()
+            void SummonWave(uint8 waveId, uint8 count)
             {
-                switch (_waveType)
-                {
-                    case 0:
-                    {
-                        // Dark Rune Commoner
-                        std::list<Creature*> triggers;
-                        GetTrashSpawnTriggers(triggers, urand(5, 6));
+                std::list<Creature*> triggers;
+                GetTrashSpawnTriggers(triggers, count);
 
-                        for (Creature* bunny : triggers)
-                            me->SummonCreature(StaticThorimTrashInfo[6 + 3].Entry, *bunny, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 3s);
-
-                        ++_waveType;
-                        break;
-                    }
-                    case 1:
-                        if (urand(0, 1))
-                        {
-                            // Dark Rune Champion or Dark Rune Evoker
-                            std::list<Creature*> triggers;
-                            GetTrashSpawnTriggers(triggers, urand(2, 4));
-
-                            for (Creature* bunny : triggers)
-                                me->SummonCreature(StaticThorimTrashInfo[6 + RAND(0, 2)].Entry, *bunny, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 3s);
-                        }
-                        else
-                        {
-                            // Dark Rune Warbringer
-                            std::list<Creature*> triggers;
-                            GetTrashSpawnTriggers(triggers);
-
-                            for (Creature* bunny : triggers)
-                                me->SummonCreature(StaticThorimTrashInfo[6 + 1].Entry, *bunny, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 3s);
-                        }
-                        --_waveType;
-                        break;
-                }
+                for (Creature* bunny : triggers)
+                    me->SummonCreature(StaticThorimTrashInfo[waveId].Entry, *bunny, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 3s);
             }
 
             bool CanStartPhase2(Unit* actor) const
@@ -1239,8 +1233,9 @@ class npc_thorim_arena_phase : public CreatureScript
                         break;
                     case DARK_RUNE_ACOLYTE:
                     {
-                        _isInArena = (_info->Entry == NPC_DARK_RUNE_ACOLYTE_PRE);
-                        SetBoundary(&ArenaBoundaries, !_isInArena);
+                        //_isInArena = (_info->Entry == NPC_DARK_RUNE_ACOLYTE_PRE);
+                        //SetBoundary(&ArenaBoundaries, !_isInArena);
+                        SetBoundary(&ArenaBoundaries, true);
                         break;
                     }
                     default:

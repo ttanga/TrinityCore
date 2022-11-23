@@ -387,7 +387,7 @@ struct boss_algalon_the_observer : public BossAI
             DoZoneInCombat();
             introDelay = 26500ms;
             summons.DespawnEntry(NPC_AZEROTH);
-            instance->SetData(EVENT_DESPAWN_ALGALON, 0);
+            //instance->SetData(EVENT_DESPAWN_ALGALON, 0);
             events.ScheduleEvent(EVENT_START_COMBAT, 16s);
         }
 

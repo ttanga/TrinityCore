@@ -884,8 +884,22 @@ class boss_leviathan_mk_ii : public CreatureScript
                             events.RescheduleEvent(EVENT_SHOCK_BLAST, 34s, 36s);
                             break;
                         case EVENT_FLAME_SUPPRESSANT_MK:
-                            DoCastAOE(SPELL_FLAME_SUPPRESSANT_MK);
-                            events.RescheduleEvent(EVENT_FLAME_SUPPRESSANT_MK, 60s, 0, PHASE_LEVIATHAN_MK_II);
+                            {
+                                SpellCastResult res = DoCastAOE(SPELL_FLAME_SUPPRESSANT_MK);
+                                events.RescheduleEvent(EVENT_FLAME_SUPPRESSANT_MK, res == SPELL_CAST_OK ? 60s : 1500ms, 0, PHASE_LEVIATHAN_MK_II);
+
+                                std::list<Creature*> flamesSpreads;
+                                me->GetCreatureListWithEntryInGrid(flamesSpreads, NPC_FLAME_SPREAD, 150.0f);
+
+                                for (Creature* flame : flamesSpreads)
+                                    flame->DespawnOrUnsummon();
+
+                                std::list<Creature*> flamesInitial;
+                                me->GetCreatureListWithEntryInGrid(flamesInitial, NPC_FLAME, 150.0f);
+
+                                for (Creature* flame : flamesInitial)
+                                    flame->DespawnOrUnsummon();
+                            }
                             break;
                         case EVENT_NAPALM_SHELL:
                             DoCastAOE(SPELL_FORCE_CAST_NAPALM_SHELL);
@@ -1080,8 +1094,10 @@ class boss_vx_001 : public CreatureScript
                             events.RescheduleEvent(EVENT_HAND_PULSE, 1500ms, 3s, 0, PHASE_VOL7RON);
                             break;
                         case EVENT_FROST_BOMB:
-                            DoCastAOE(SPELL_SCRIPT_EFFECT_FROST_BOMB);
-                            events.RescheduleEvent(EVENT_FROST_BOMB, 45s);
+                            {
+                                SpellCastResult res = DoCastAOE(SPELL_SCRIPT_EFFECT_FROST_BOMB);
+                                events.RescheduleEvent(EVENT_FROST_BOMB, res == SPELL_CAST_OK ? 45s : 500ms);
+                            }
                             break;
                         case EVENT_SPINNING_UP:
                             DoCastAOE(SPELL_SPINNING_UP);
@@ -1157,6 +1173,16 @@ class boss_aerial_command_unit : public CreatureScript
                 }
             }
 
+            //void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
+            //{
+            //    if (spellInfo->Id == SPELL_MAGNETIC_CORE && caster->GetEntry() == NPC_MAGNETIC_CORE)
+            //    {
+            //        DoCast(me, SPELL_MAGNETIC_CORE_VISUAL);
+            //        me->GetMotionMaster()->Clear();
+            //        me->GetMotionMaster()->MovePoint(0, caster->GetPositionX(), caster->GetPositionY(), caster->GetPositionZ());
+            //    }
+            //}
+
             void DoAction(int32 action) override
             {
                 switch (action)
@@ -1182,10 +1208,19 @@ class boss_aerial_command_unit : public CreatureScript
                         me->CastStop();
                         me->SetReactState(REACT_PASSIVE);
                         me->AttackStop();
+                        me->SetHover(false);
+                        //me->SetDisableGravity(false);
+                        me->GetMotionMaster()->MoveIdle();
                         me->GetMotionMaster()->MoveFall();
+                        //me->CastSpell(me, SPELL_MAGNETIC_CORE_VISUAL);
                         events.DelayEvents(23s);
                         break;
                     case DO_ENABLE_AERIAL:
+                        me->SetDisableGravity(false);
+                        me->SetHover(true);
+                        me->GetMotionMaster()->MovePoint(0, me->GetPositionX(), me->GetPositionY(), ACUSummonPos.m_positionZ);
+                        me->SetDisableGravity(false);
+                        me->SetHover(true);
                         me->SetReactState(REACT_AGGRESSIVE);
                         break;
                     case DO_ASSEMBLED_COMBAT:
@@ -1666,7 +1701,7 @@ struct npc_mimiron_magnetic_core : public ScriptedAI
     void Reset() override
     {
         me->SetReactState(REACT_PASSIVE);
-        DoCastAOE(SPELL_MAGNETIC_CORE, true);
+        DoCastAOE(SPELL_MAGNETIC_CORE, CastSpellExtraArgs(true).AddSpellMod(SPELLVALUE_RADIUS_MOD, 20000));
     }
 };
 
