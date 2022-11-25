@@ -577,6 +577,7 @@ class boss_mimiron : public CreatureScript
                             break;
                         case EVENT_AERIAL_ACTIVATION_3:
                             me->SummonCreature(NPC_AERIAL_COMMAND_UNIT, ACUSummonPos, TEMPSUMMON_MANUAL_DESPAWN);
+                            me->GetInstanceScript()->SetBossState(DATA_MIMIRON, IN_PROGRESS);
                             events.ScheduleEvent(EVENT_AERIAL_ACTIVATION_4, 5s);
                             break;
                         case EVENT_AERIAL_ACTIVATION_4:
@@ -886,19 +887,7 @@ class boss_leviathan_mk_ii : public CreatureScript
                         case EVENT_FLAME_SUPPRESSANT_MK:
                             {
                                 SpellCastResult res = DoCastAOE(SPELL_FLAME_SUPPRESSANT_MK);
-                                events.RescheduleEvent(EVENT_FLAME_SUPPRESSANT_MK, res == SPELL_CAST_OK ? 60s : 1500ms, 0, PHASE_LEVIATHAN_MK_II);
-
-                                std::list<Creature*> flamesSpreads;
-                                me->GetCreatureListWithEntryInGrid(flamesSpreads, NPC_FLAME_SPREAD, 150.0f);
-
-                                for (Creature* flame : flamesSpreads)
-                                    flame->DespawnOrUnsummon();
-
-                                std::list<Creature*> flamesInitial;
-                                me->GetCreatureListWithEntryInGrid(flamesInitial, NPC_FLAME, 150.0f);
-
-                                for (Creature* flame : flamesInitial)
-                                    flame->DespawnOrUnsummon();
+                                events.RescheduleEvent(EVENT_FLAME_SUPPRESSANT_MK, res == SPELL_CAST_OK ? 60s : 500ms, 0, PHASE_LEVIATHAN_MK_II);
                             }
                             break;
                         case EVENT_NAPALM_SHELL:
@@ -1776,7 +1765,11 @@ class spell_mimiron_bomb_bot : public SpellScriptLoader
         }
 };
 
-// 65192 - Flame Suppressant, 65224 - Clear Fires, 65354 - Clear Fires, 64619 - Water Spray
+// 64570 - Flame Suppressant
+// 65192 - Flame Suppressant
+// 65224 - Clear Fires
+// 65354 - Clear Fires
+// 64619 - Water Spray
 class spell_mimiron_clear_fires : public SpellScriptLoader
 {
     public:
@@ -1795,6 +1788,7 @@ class spell_mimiron_clear_fires : public SpellScriptLoader
             void Register() override
             {
                 OnEffectHitTarget += SpellEffectFn(spell_mimiron_clear_fires_SpellScript::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+                OnEffectHitTarget += SpellEffectFn(spell_mimiron_clear_fires_SpellScript::HandleDummy, EFFECT_1, SPELL_EFFECT_DUMMY);
             }
         };
 

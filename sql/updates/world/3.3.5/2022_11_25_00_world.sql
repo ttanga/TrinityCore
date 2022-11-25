@@ -1,0 +1,1 @@
+INSERT INTO spell_script_names (spell_id, ScriptName) values (64570, 'spell_mimiron_clear_fires')
