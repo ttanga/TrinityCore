@@ -142,6 +142,13 @@ enum Events
     EVENT_BLIZZARD
 };
 
+enum SummonGroups
+{
+    SUMMON_GROUP_ARENA = 1,
+    SUMMON_GROUP_GAUNTLET_COLOSSUS = 2,
+    SUMMON_GROUP_GAUNTLET_GIANT = 3
+};
+
 enum Yells
 {
     // Thorim
@@ -277,45 +284,12 @@ enum Actions
 {
     ACTION_INCREASE_PREADDS_COUNT,
     ACTION_ACTIVATE_RUNIC_SMASH,
-    ACTION_ACTIVATE_ADDS,
+    ACTION_ACTIVATE_COLOSSUS_ADDS,
+    ACTION_ACTIVATE_GIANT_ADDS,
     ACTION_PILLAR_CHARGED,
     ACTION_START_HARD_MODE,
-    ACTION_BERSERK
-};
-
-struct SummonLocation
-{
-    Position pos;
-    uint32 entry;
-};
-
-SummonLocation const PreAddLocations[] =
-{
-    { { 2149.68f, -263.477f, 419.679f, 3.120f }, NPC_JORMUNGAR_BEHEMOTH    },
-    { { 2131.31f, -271.640f, 419.840f, 2.188f }, NPC_MERCENARY_CAPTAIN_A   },
-    { { 2127.24f, -259.182f, 419.974f, 5.917f }, NPC_MERCENARY_SOLDIER_A   },
-    { { 2123.32f, -254.770f, 419.840f, 6.170f }, NPC_MERCENARY_SOLDIER_A   },
-    { { 2120.10f, -258.990f, 419.840f, 6.250f }, NPC_MERCENARY_SOLDIER_A   },
-    { { 2129.09f, -277.142f, 419.756f, 1.222f }, NPC_DARK_RUNE_ACOLYTE_PRE }
-};
-
-SummonLocation const ColossusAddLocations[] =
-{
-    { { 2218.38f, -297.50f, 412.18f, 1.030f }, NPC_IRON_RING_GUARD   },
-    { { 2235.07f, -297.98f, 412.18f, 1.613f }, NPC_IRON_RING_GUARD   },
-    { { 2235.26f, -338.34f, 412.18f, 1.589f }, NPC_IRON_RING_GUARD   },
-    { { 2217.69f, -337.39f, 412.18f, 1.241f }, NPC_IRON_RING_GUARD   },
-    { { 2227.58f, -308.30f, 412.18f, 1.591f }, NPC_DARK_RUNE_ACOLYTE },
-    { { 2227.47f, -345.37f, 412.18f, 1.566f }, NPC_DARK_RUNE_ACOLYTE }
-};
-
-SummonLocation const GiantAddLocations[] =
-{
-    { { 2198.05f, -428.77f, 419.95f, 6.056f }, NPC_IRON_HONOR_GUARD  },
-    { { 2220.31f, -436.22f, 412.26f, 1.064f }, NPC_IRON_HONOR_GUARD  },
-    { { 2158.88f, -441.73f, 438.25f, 0.127f }, NPC_IRON_HONOR_GUARD  },
-    { { 2198.29f, -436.92f, 419.95f, 0.261f }, NPC_DARK_RUNE_ACOLYTE },
-    { { 2230.93f, -434.27f, 412.26f, 1.931f }, NPC_DARK_RUNE_ACOLYTE }
+    ACTION_BERSERK,
+    ACTION_RESET,
 };
 
 Position const SifSpawnPosition = { 2148.301f, -297.8453f, 438.3308f, 2.687807f };
@@ -463,6 +437,21 @@ class boss_thorim : public CreatureScript
                 Initialize();
             }
 
+            void SummonAdds()
+            {
+                arenaAdds.clear();
+                me->SummonCreatureGroup(SUMMON_GROUP_ARENA, &arenaAdds);
+
+                gauntletColossusAdds.clear();
+                me->SummonCreatureGroup(SUMMON_GROUP_GAUNTLET_COLOSSUS, &gauntletColossusAdds);
+                for (TempSummon* summon : gauntletColossusAdds)
+                    summon->SetImmuneToPC(true);
+
+                me->SummonCreatureGroup(SUMMON_GROUP_GAUNTLET_GIANT, &gauntletGiantAdds);
+                for (TempSummon* summon : gauntletGiantAdds)
+                    summon->SetImmuneToPC(true);
+            }
+
             void Initialize()
             {
                 _killedCount = 0;
@@ -470,6 +459,15 @@ class boss_thorim : public CreatureScript
                 _hardMode = true;
                 _orbSummoned = false;
                 _dontStandInTheLightning = true;
+            }
+
+            void InitializeAI() override
+            {
+                if (!me->isDead() && instance->GetBossState(DATA_THORIM) != DONE)
+                {
+                    Reset();
+                    SummonAdds();
+                }
             }
 
             void Reset() override
@@ -488,15 +486,6 @@ class boss_thorim : public CreatureScript
 
                 events.SetPhase(PHASE_NULL);
 
-                // Respawn Mini Bosses
-                for (uint8 i = DATA_RUNIC_COLOSSUS; i <= DATA_RUNE_GIANT; ++i)
-                    if (Creature* miniBoss = ObjectAccessor::GetCreature(*me, instance->GetGuidData(i)))
-                        miniBoss->Respawn(true);
-
-                // Spawn Pre Phase Adds
-                for (SummonLocation const& s : PreAddLocations)
-                    me->SummonCreature(s.entry, s.pos, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 3s);
-
                 if (GameObject* lever = instance->GetGameObject(DATA_THORIM_LEVER))
                     lever->SetFlag(GO_FLAG_NOT_SELECTABLE);
 
@@ -513,6 +502,9 @@ class boss_thorim : public CreatureScript
             void EnterEvadeMode(EvadeReason /*why*/) override
             {
                 summons.DespawnAll();
+                arenaAdds.clear();
+                gauntletColossusAdds.clear();
+                gauntletGiantAdds.clear();
                 _DespawnAtEvade();
             }
 
@@ -642,11 +634,7 @@ class boss_thorim : public CreatureScript
 
                 DoCast(me, SPELL_SHEATH_OF_LIGHTNING);
 
-                if (Creature* runicColossus = instance->GetCreature(DATA_RUNIC_COLOSSUS))
-                {
-                    runicColossus->SetImmuneToPC(false);
-                    runicColossus->AI()->DoAction(ACTION_ACTIVATE_ADDS);
-                }
+                DoAction(ACTION_ACTIVATE_COLOSSUS_ADDS);
 
                 if (GameObject* lever = instance->GetGameObject(DATA_THORIM_LEVER))
                     lever->RemoveFlag(GO_FLAG_NOT_SELECTABLE);
@@ -867,6 +855,14 @@ class boss_thorim : public CreatureScript
                             DoZoneInCombat(me);
                         }
                         break;
+                    case ACTION_ACTIVATE_COLOSSUS_ADDS:
+                        for (TempSummon* summon : gauntletColossusAdds)
+                            summon->SetImmuneToPC(false);
+                        break;
+                    case ACTION_ACTIVATE_GIANT_ADDS:
+                        for (TempSummon* summon : gauntletGiantAdds)
+                            summon->SetImmuneToPC(false);
+                        break;
                     default:
                         break;
                 }
@@ -946,6 +942,9 @@ class boss_thorim : public CreatureScript
             bool _encounterFinished;
             bool _orbSummoned;
             bool _dontStandInTheLightning;
+            std::list<TempSummon*> arenaAdds;
+            std::list<TempSummon*> gauntletColossusAdds;
+            std::list<TempSummon*> gauntletGiantAdds;
         };
 
         CreatureAI* GetAI(Creature* creature) const override
@@ -1346,26 +1345,6 @@ struct npc_thorim_minibossAI : public ScriptedAI
         return IsInBoundary(who);
     }
 
-    void JustSummoned(Creature* summon) final override
-    {
-        _summons.Summon(summon);
-    }
-
-    void SummonedCreatureDespawn(Creature* summon) final override
-    {
-        _summons.Despawn(summon);
-    }
-
-    void DoAction(int32 action) override
-    {
-        if (action == ACTION_ACTIVATE_ADDS)
-        {
-            for (ObjectGuid const& guid : _summons)
-                if (Creature* summon = ObjectAccessor::GetCreature(*me, guid))
-                    summon->SetImmuneToPC(false);
-        }
-    }
-
 protected:
     InstanceScript* _instance;
     EventMap _events;
@@ -1396,11 +1375,6 @@ class npc_runic_colossus : public CreatureScript
 
                 // close the Runic Door
                 _instance->HandleGameObject(_instance->GetGuidData(DATA_RUNIC_DOOR), false);
-
-                // Spawn trashes
-                _summons.DespawnAll();
-                for (SummonLocation const& s : ColossusAddLocations)
-                    me->SummonCreature(s.entry, s.pos, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 3s);
             }
 
             void MoveInLineOfSight(Unit* /*who*/) override
@@ -1428,12 +1402,9 @@ class npc_runic_colossus : public CreatureScript
                 _instance->HandleGameObject(_instance->GetGuidData(DATA_RUNIC_DOOR), true);
 
                 if (Creature* thorim = _instance->GetCreature(DATA_THORIM))
-                    thorim->AI()->Talk(SAY_SPECIAL);
-
-                if (Creature* giant = _instance->GetCreature(DATA_RUNE_GIANT))
                 {
-                    giant->SetImmuneToPC(false);
-                    giant->AI()->DoAction(ACTION_ACTIVATE_ADDS);
+                    thorim->AI()->Talk(SAY_SPECIAL);
+                    thorim->AI()->DoAction(ACTION_ACTIVATE_GIANT_ADDS);
                 }
             }
 
@@ -1517,11 +1488,6 @@ class npc_ancient_rune_giant : public CreatureScript
 
                 // close the Stone Door
                 _instance->HandleGameObject(_instance->GetGuidData(DATA_STONE_DOOR), false);
-
-                // Spawn trashes
-                _summons.DespawnAll();
-                for (SummonLocation const& s : GiantAddLocations)
-                    me->SummonCreature(s.entry, s.pos, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 3s);
             }
 
             void JustEngagedWith(Unit* /*who*/) override
