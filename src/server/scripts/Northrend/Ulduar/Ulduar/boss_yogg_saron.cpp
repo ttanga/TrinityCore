@@ -17,6 +17,8 @@
 
 #include "ScriptMgr.h"
 #include "CreatureTextMgr.h"
+#include "GameObject.h"
+#include "GameObjectAI.h"
 #include "GridNotifiers.h"
 #include "InstanceScript.h"
 #include "Map.h"
@@ -270,6 +272,7 @@ enum Spells
     SPELL_ILLUSION_ROOM                     = 63988,
     SPELL_HATE_TO_ZERO                      = 63984,
     SPELL_TELEPORT_BACK_TO_MAIN_ROOM        = 63992,
+    SPELL_CANCEL_ILLUSION_ROOM_AURA         = 63993,
     SPELL_INSANE_VISUAL                     = 64464,
     SPELL_CONSTRICTOR_TENTACLE_SUMMON       = 64133,
     SPELL_SQUEEZE                           = 64125,
@@ -573,16 +576,25 @@ class boss_voice_of_yogg_saron : public CreatureScript
                             events.ScheduleEvent(EVENT_SUMMON_GUARDIAN_OF_YOGG_SARON, _guardianTimer, 0, PHASE_ONE);
                             break;
                         case EVENT_SUMMON_CORRUPTOR_TENTACLE:
-                            DoCastAOE(SPELL_CORRUPTOR_TENTACLE_SUMMON);
-                            events.ScheduleEvent(EVENT_SUMMON_CORRUPTOR_TENTACLE, 30s, EVENT_GROUP_SUMMON_TENTACLES, PHASE_TWO);
+                            {
+                                SpellCastResult castResult = DoCastAOE(SPELL_CORRUPTOR_TENTACLE_SUMMON);
+                                Milliseconds nextCastDelay = castResult != SPELL_FAILED_SPELL_IN_PROGRESS ? 30s : 500ms;
+                                events.ScheduleEvent(EVENT_SUMMON_CORRUPTOR_TENTACLE, nextCastDelay, EVENT_GROUP_SUMMON_TENTACLES, PHASE_TWO);
+                            }
                             break;
                         case EVENT_SUMMON_CONSTRICTOR_TENTACLE:
-                            DoCastAOE(SPELL_CONSTRICTOR_TENTACLE, { SPELLVALUE_MAX_TARGETS, 1 });
-                            events.ScheduleEvent(EVENT_SUMMON_CONSTRICTOR_TENTACLE, 25s, EVENT_GROUP_SUMMON_TENTACLES, PHASE_TWO);
+                            {
+                                SpellCastResult castResult = DoCastAOE(SPELL_CONSTRICTOR_TENTACLE, { SPELLVALUE_MAX_TARGETS, 1 });
+                                Milliseconds nextCastDelay = castResult != SPELL_FAILED_SPELL_IN_PROGRESS ? 17s : 500ms;
+                                events.ScheduleEvent(EVENT_SUMMON_CONSTRICTOR_TENTACLE, nextCastDelay, EVENT_GROUP_SUMMON_TENTACLES, PHASE_TWO);
+                            }
                             break;
                         case EVENT_SUMMON_CRUSHER_TENTACLE:
-                            DoCastAOE(SPELL_CRUSHER_TENTACLE_SUMMON);
-                            events.ScheduleEvent(EVENT_SUMMON_CRUSHER_TENTACLE, 60s, EVENT_GROUP_SUMMON_TENTACLES, PHASE_TWO);
+                            {
+                                SpellCastResult castResult = DoCastAOE(SPELL_CRUSHER_TENTACLE_SUMMON);
+                                Milliseconds nextCastDelay = castResult != SPELL_FAILED_SPELL_IN_PROGRESS ? 60s : 500ms;
+                                events.ScheduleEvent(EVENT_SUMMON_CRUSHER_TENTACLE, nextCastDelay, EVENT_GROUP_SUMMON_TENTACLES, PHASE_TWO);
+                            }
                             break;
                         case EVENT_ILLUSION:
                         {
@@ -601,7 +613,7 @@ class boss_voice_of_yogg_saron : public CreatureScript
 
                             if (Creature* brain = instance->GetCreature(DATA_BRAIN_OF_YOGG_SARON))
                                 brain->AI()->DoAction(ACTION_INDUCE_MADNESS);
-                            events.ScheduleEvent(EVENT_ILLUSION, 80s, 0, PHASE_TWO);  // wowwiki says 80 secs, wowhead says something about 90 secs
+                            events.ScheduleEvent(EVENT_ILLUSION, 90s, 0, PHASE_TWO);  // wowwiki says 80 secs, wowhead says something about 90 secs
                             break;
                         }
                         case EVENT_SUMMON_IMMORTAL_GUARDIAN:
@@ -849,16 +861,22 @@ class boss_sara : public CreatureScript
                             _events.ScheduleEvent(EVENT_DEATH_RAY, 21s, 0, PHASE_TWO);
                             break;
                         case EVENT_MALADY_OF_THE_MIND:
-                            DoCastAOE(SPELL_MALADY_OF_THE_MIND, { SPELLVALUE_MAX_TARGETS, 1 });
-                            _events.ScheduleEvent(EVENT_MALADY_OF_THE_MIND, 18s, 25s, 0, PHASE_TWO);
+                            {
+                                SpellCastResult castResult = DoCastAOE(SPELL_MALADY_OF_THE_MIND, { SPELLVALUE_MAX_TARGETS, 1 });
+                                Milliseconds baseDelay = castResult != SPELL_FAILED_SPELL_IN_PROGRESS ? 17500ms : 500ms;
+                                _events.ScheduleEvent(EVENT_MALADY_OF_THE_MIND, baseDelay + 500ms, baseDelay + 7500s, 0, PHASE_TWO);
+                            }
                             break;
                         case EVENT_PSYCHOSIS:
                             DoCastAOE(SPELL_PSYCHOSIS, { SPELLVALUE_MAX_TARGETS, 1 });
                             _events.ScheduleEvent(EVENT_PSYCHOSIS, 4s, 0, PHASE_TWO);
                             break;
                         case EVENT_BRAIN_LINK:
-                            DoCastAOE(SPELL_BRAIN_LINK, { SPELLVALUE_MAX_TARGETS, 2 });
-                            _events.ScheduleEvent(EVENT_BRAIN_LINK, 23s, 26s, 0, PHASE_TWO);
+                            {
+                                SpellCastResult castResult = DoCastAOE(SPELL_BRAIN_LINK, { SPELLVALUE_MAX_TARGETS, 2 });
+                                Milliseconds baseDelay = castResult != SPELL_FAILED_SPELL_IN_PROGRESS ? 22500ms : 500ms;
+                                _events.ScheduleEvent(EVENT_BRAIN_LINK, baseDelay + 500ms, baseDelay + 3500ms, 0, PHASE_TWO);
+                            }
                             break;
                         default:
                             break;
@@ -1027,6 +1045,7 @@ class boss_yogg_saron : public CreatureScript
                             _events.ScheduleEvent(EVENT_DEAFENING_ROAR, 20s, 25s, 0, PHASE_THREE);    // timer guessed
                         Talk(SAY_YOGG_SARON_PHASE_3);
                         DoCast(me, SPELL_PHASE_3_TRANSFORM);
+                        me->SetCombatReach(20.f);
                         me->RemoveAurasDueToSpell(SPELL_SHADOWY_BARRIER_YOGG);
                         me->ResetPlayerDamageReq();
                         break;
@@ -1101,7 +1120,21 @@ class boss_brain_of_yogg_saron : public CreatureScript
                     {
                         _tentaclesKilled = 0;
 
-                        me->SummonCreatureGroup(_instance->GetData(DATA_ILLUSION));
+                        uint8 summonGroupId = _instance->GetData(DATA_ILLUSION);
+                        std::list<TempSummon*> summonList;
+                        me->SummonCreatureGroup(summonGroupId, &summonList);
+                        switch (summonGroupId)
+                        {
+                            case ICECROWN_ILLUSION:
+                                for (TempSummon* summon : summonList)
+                                    if (summon->GetEntry() == NPC_THE_LICH_KING)
+                                    {
+                                        summon->SetReactState(REACT_PASSIVE);
+                                        summon->SetImmuneToPC(true);
+                                        break;
+                                    }
+                                break;
+                        }
 
                         // make sure doors won't be opened
                         for (uint32 i = GO_BRAIN_ROOM_DOOR_1; i <= GO_BRAIN_ROOM_DOOR_3; ++i)
@@ -2662,6 +2695,22 @@ class spell_yogg_saron_death_ray_warning_visual : public SpellScriptLoader     /
         }
 };
 
+struct go_flee_to_the_surface : public GameObjectAI
+{
+    go_flee_to_the_surface(GameObject* go) : GameObjectAI(go), _instance(go->GetInstanceScript()) { }
+
+    bool OnReportUse(Player* player) override
+    {
+        player->CastSpell(player, SPELL_CANCEL_ILLUSION_ROOM_AURA);
+
+        return false;
+    }
+
+private:
+    EventMap _events;
+    InstanceScript* _instance;
+};
+
 // 63993 - Cancel Illusion Room Aura
 class spell_yogg_saron_cancel_illusion_room_aura : public SpellScriptLoader    // 63993
 {
@@ -3191,6 +3240,7 @@ class spell_yogg_saron_hodirs_protective_gaze : public SpellScriptLoader     // 
 
 void AddSC_boss_yogg_saron()
 {
+    RegisterGameObjectAI(go_flee_to_the_surface);
     new boss_voice_of_yogg_saron();
     new boss_sara();
     new boss_yogg_saron();

@@ -1,0 +1,1 @@
+UPDATE gameobject_template SET ScriptName = 'go_flee_to_the_surface' WHERE entry = 194625
