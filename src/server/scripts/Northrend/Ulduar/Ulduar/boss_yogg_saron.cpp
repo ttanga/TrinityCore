@@ -30,6 +30,7 @@
 #include "ScriptedCreature.h"
 #include "Spell.h"
 #include "SpellAuraEffects.h"
+#include "SpellHistory.h"
 #include "SpellMgr.h"
 #include "SpellScript.h"
 #include "TemporarySummon.h"
@@ -1222,6 +1223,10 @@ class npc_guardian_of_yogg_saron : public CreatureScript
 
             void JustDied(Unit* /*killer*/) override
             {
+                // simple hack to allow cast happen after interrupts
+                // generic fix is to add TRIGGERED_IGNORE_SCHOOL_LOCK flag or so
+                // but this will lead either to breaking changes or increasing complicity of code
+                me->GetSpellHistory()->LockSpellSchool(SPELL_SCHOOL_MASK_SHADOW, 0);
                 DoCastAOE(SPELL_SHADOW_NOVA);
                 DoCastAOE(SPELL_SHADOW_NOVA_2);
             }
