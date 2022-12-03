@@ -52,7 +52,8 @@ enum FreyaSpells
 {
     // Freya
     SPELL_ATTUNED_TO_NATURE                      = 62519,
-    SPELL_TOUCH_OF_EONAR                         = 62528,
+    SPELL_TOUCH_OF_EONAR_10                      = 62528,
+    SPELL_TOUCH_OF_EONAR_25                      = 62892,
     SPELL_SUNBEAM                                = 62623,
     SPELL_ENRAGE                                 = 47008,
     SPELL_FREYA_GROUND_TREMOR                    = 62437,
@@ -240,7 +241,35 @@ class npc_iron_roots : public CreatureScript
                 me->SetInCombatWith(summoner);
             }
 
+
+            void KilledUnit(Unit* who) override
+            {
+                if (who->GetGUID() == summonerGUID)
+                {
+                    Unsummon();
+                }
+            }
+
             void JustDied(Unit* /*killer*/) override
+            {
+                Unsummon();
+            }
+
+            void EnterEvadeMode(EvadeReason /*why*/) override
+            {
+                Unsummon();
+            }
+
+            void UpdateAI(uint32 diff) override
+            {
+                ScriptedAI::UpdateAI(diff);
+
+                if (Player* target = ObjectAccessor::GetPlayer(*me, summonerGUID))
+                    if (!target->HasAura(SPELL_ROOTS_FREYA))
+                        Unsummon();
+            }
+
+            void Unsummon()
             {
                 if (Player* target = ObjectAccessor::GetPlayer(*me, summonerGUID))
                 {
@@ -437,15 +466,12 @@ class boss_freya : public CreatureScript
                                 SelectTargetList(targets, RAID_MODE(1, 3), SelectTargetMethod::Random, 0, 100.0f, true);
 
                                 if (!targets.empty())
-                                {
-                                    uint32 i = 0;
-                                    for (std::list<Unit*>::const_iterator itr = targets.begin(); itr != targets.end(); ++itr, ++i)
+                                    for (std::list<Unit*>::const_iterator itr = targets.begin(); itr != targets.end(); ++itr)
                                     {
                                         Unit* target = *itr;
                                         if (target->IsAlive())
                                             target->CastSpell(target, SPELL_FREYA_UNSTABLE_SUNBEAM, true);
                                     }
-                                }
 
                                 events.ScheduleEvent(EVENT_UNSTABLE_ENERGY, 25s, 40s);
                             }
@@ -463,15 +489,27 @@ class boss_freya : public CreatureScript
                             events.ScheduleEvent(EVENT_EONAR_GIFT, 40s, 50s);
                             break;
                         case EVENT_STRENGTHENED_IRON_ROOTS:
-                            Talk(EMOTE_IRON_ROOTS);
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true, true, -SPELL_ROOTS_FREYA))
-                                target->CastSpell(target, SPELL_ROOTS_FREYA, true); // This must be cast by Target self
-                            events.ScheduleEvent(EVENT_STRENGTHENED_IRON_ROOTS, 12s, 20s);
+                            {
+                                Talk(EMOTE_IRON_ROOTS);
+                                std::list<Unit*> targets;
+                                SelectTargetList(targets, RAID_MODE(1, 3), SelectTargetMethod::Random, 0, 100.0f, true, true, -SPELL_ROOTS_FREYA);
+
+                                if (!targets.empty())
+                                    for (std::list<Unit*>::const_iterator itr = targets.begin(); itr != targets.end(); ++itr)
+                                    {
+                                        Unit* target = *itr;
+                                        if (target->IsAlive())
+                                            target->CastSpell(target, SPELL_ROOTS_FREYA, true); // This must be cast by Target self
+                                    }
+
+                                events.ScheduleEvent(EVENT_STRENGTHENED_IRON_ROOTS, 50s, 60s);
+                            }
                             break;
                         case EVENT_GROUND_TREMOR:
                             Talk(EMOTE_GROUND_TREMOR);
-                            DoCastAOE(SPELL_FREYA_GROUND_TREMOR);
-                            events.ScheduleEvent(EVENT_GROUND_TREMOR, 25s, 28s);
+                            SpellCastResult castResult = DoCastAOE(SPELL_FREYA_GROUND_TREMOR);
+                            Milliseconds baseDelay = castResult != SPELL_FAILED_SPELL_IN_PROGRESS ? 25s : 500ms;
+                            events.ScheduleEvent(EVENT_GROUND_TREMOR, baseDelay, baseDelay + 3s);
                             break;
                     }
 
@@ -479,8 +517,9 @@ class boss_freya : public CreatureScript
                         return;
                 }
 
-                if (!me->HasAura(SPELL_TOUCH_OF_EONAR))
-                    me->CastSpell(me, SPELL_TOUCH_OF_EONAR, true);
+                int touchOfEonarAuraId = RAID_MODE((int)SPELL_TOUCH_OF_EONAR_10, (int)SPELL_TOUCH_OF_EONAR_25);
+                if (!me->HasAura(touchOfEonarAuraId))
+                    me->CastSpell(me, touchOfEonarAuraId, true);
 
                 // For achievement check
                 if (Aura* aura = me->GetAura(SPELL_ATTUNED_TO_NATURE))
@@ -1182,8 +1221,11 @@ class npc_storm_lasher : public CreatureScript
 
                 if (lightningLashTimer <= diff)
                 {
-                    DoCast(SPELL_LIGHTNING_LASH);
-                    lightningLashTimer = urand(7000, 14000);
+                    if (!me->GetCurrentSpell(CURRENT_GENERIC_SPELL))
+                    {
+                        DoCast(SPELL_LIGHTNING_LASH);
+                        lightningLashTimer = urand(7000, 14000);
+                    }
                 }
                 else
                     lightningLashTimer -= diff;
@@ -1197,7 +1239,10 @@ class npc_storm_lasher : public CreatureScript
                 else
                     stormboltTimer -= diff;
 
-                DoMeleeAttackIfReady();
+                if (!me->GetCurrentSpell(CURRENT_GENERIC_SPELL))
+                {
+                    DoMeleeAttackIfReady();
+                }
             }
 
             void JustDied(Unit* /*killer*/) override
