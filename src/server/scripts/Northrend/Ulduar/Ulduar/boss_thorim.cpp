@@ -46,7 +46,8 @@ enum Spells
     SPELL_LIGHTNING_DESTRUCTION                 = 62393,
     SPELL_TOUCH_OF_DOMINION                     = 62507,
     SPELL_TOUCH_OF_DOMINION_TRIGGERED           = 62565,
-    SPELL_CHAIN_LIGHTNING                       = 62131,
+    SPELL_CHAIN_LIGHTNING_10                    = 62131,
+    SPELL_CHAIN_LIGHTNING_25                    = 64390,
     SPELL_LIGHTNING_ORB_CHARGED                 = 62186, // wrong duration, triggered spell should handle lightning release
     SPELL_LIGHTNING_CHARGE                      = 62279,
     SPELL_LIGHTNING_RELEASE                     = 62466,
@@ -751,7 +752,7 @@ class boss_thorim : public CreatureScript
                             break;
                         case EVENT_CHAIN_LIGHTNING:
                             if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
-                                DoCast(target, SPELL_CHAIN_LIGHTNING);
+                                DoCast(target, RAID_MODE(SPELL_CHAIN_LIGHTNING_10, SPELL_CHAIN_LIGHTNING_25));
                             events.Repeat(7s, 15s);
                             break;
                         case EVENT_START_PERIODIC_CHARGE:
